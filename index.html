@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>測試</title>
+    <link rel="stylesheet" href="./css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <style>
+        .banner {
+            background-image: url(./banner1.jpg);
+            height: 280px;
+            background-position: center center;
+            background-size: cover;
+        }
+
+        .bg-cover {
+            height: 180px;
+            background-position: center center;
+            background-size: cover;
+        }
+
+        #map {
+            height: 550px;
+        }
+        .cardimg{
+            height: 180px;
+        }
+    </style>
+
+</head>
+
+<body>
+    <!-- 用vue綁 -->
+    <div id="app">
+        <!-- 頂圖及title部分 -->
+        <div class="banner">
+            <div class="display-1 text-white fw-bolder p-5">
+                {{title}}
+            </div>
+            <div class="col-4 ms-5">
+                <!-- 下拉式選單部分 -->
+                <div class="select_title">
+                    <select name="" id="" class="form-control text-center" v-model="currentLocation"
+                        @change="updataMarkers">
+                        <option value="">--全部--</option>
+                        <option :value="item" v-for="item in regions">{{item}}</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        <section class="map container-fluid">
+            <div class="row">
+                <div class="col-12">
+                    <div id="map"></div>
+                </div>
+            </div>
+        </section>
+        <div class="container-fluid">
+            <!-- 使用卡片呈現內容 -->
+            <div class="row">
+                <div class="col-md-3 mt-4" v-for="(item,key) in filterData[currentPage]">
+                    <div class="card border-info">
+                        <div :style="{backgroundImage: 'url('+item.Picture1+')'}" class="bg-cover"></div>
+                        <div class="card-body">
+                            <h5>地點名稱:{{item.Name}}</h5>
+                            <h5>營業時間:{{item.Opentime}}</h5>
+                            <h5>地址:{{item.Add}}</h5>
+                            <h5>電話:{{item.Tel}}</h5>
+                            <h5 v-if="item.Ticketinfo">費用:{{item.Ticketinfo}}</h5>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row mt-3">
+            <nav aria-label="Page navigation example">
+                <ul class="pagination justify-content-center">
+                    <li class="page-item">
+                        <a class="page-link" href="#" aria-label="Previous">
+                            <span aria-hidden="true">&laquo;</span>
+                        </a>
+                    </li>
+                    <li class="page-item" v-for="page in filterData.length">
+                        <a class="page-link" @click.prevent="currentPage = page -1" href="#">{{page}}</a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="#" aria-label="Next">
+                            <span aria-hidden="true">&raquo;</span>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+    </div>
+
+
+    <script src="./js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios@1.1.2/dist/axios.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <script>
+        let markers = [];
+        const { ref, reactive, computed, onUpdated } = Vue;
+        const App = {
+            data() {
+
+                return {
+                    data: [],//從opendata取出來的資料
+                    regions: [],//將所有的區取出來
+                    title: "南部景點",
+                    currentPage: 0,
+                    currentLocation: "",
+                }
+            },
+            created() {
+                const vm = this;
+                const url = 'https://api.kcg.gov.tw/api/service/get/9c8e1450-e833-499c-8320-29b36b7ace5c';
+                axios.get(url)
+                    .then(function (response) {
+                        // console.log(response.data.data.XML_Head.Infos.Info);
+                        vm.data = response.data.data.XML_Head.Infos.Info;
+                        vm.getRegions();
+
+                    })
+                    .catch(function (error) {
+                        console.log(error);
+                    })
+            },
+            methods: {
+                drawMap() {
+                    map = L.map('map').setView([22.639771184917247, 120.30261228281725], 13);
+                    // console.log(map);
+                    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                    }).addTo(map);
+                },
+                getRegions() {
+                    const vm = this;
+                    const regions = new Set();
+                    vm.data.forEach((item, key) => {
+                        regions.add(item.Add.substring(6, item.Add.indexOf("區", 0) + 1));
+                    });
+                    vm.regions = Array.from(regions);
+                },
+                page0(page) {
+                    if (page - 1 != 0) {
+                        currentPage = 0;
+                        return currentPage;
+                    } else {
+                        currentPage = page - 1;
+                        return currentPage;
+                    }
+                },
+                removeMaker() {
+                    markers.forEach(function (marker) {
+                        map.removeLayer(marker);
+                    })
+                },
+                updataMarkers() {
+                    this.removeMaker();
+                    const vm = this;
+                    let lng;
+                    let lat;
+                    
+                    const item = this.data.filter((item) => {
+                        return item.Add.substring(6, item.Add.indexOf("區", 0) + 1) === this.currentLocation;
+                    })
+                    item.forEach((item) => {
+                        lng = item.Px;//經度
+                        lat = item.Py;//緯度
+                        name = item.Name;
+                        add = item.Add;
+                        tel = item.Tel;
+                        img = item.Picture1;
+                        const card = '<div class="col-12"><div class="card"><div class="card-head h3 text-center mt-2 fw-bold">'+name+'</div><div ><img class="cardimg" src="'+img+'"></div><div class="card-body"><ul class="list-group"><li class="list-group-item"><h5>地址:'+add+'</h5><h5>電話:'+tel+'</h5></li></ul></div></div></div>';
+                        markers.push(L.marker([lat, lng]).addTo(map).bindPopup(card).openPopup());
+                        
+                    })
+                    // console.log(item);
+                }
+            },
+            computed: {
+                filterData() {
+                    const vm = this;
+                    const newData = [];
+                    let items = [];
+                    if (vm.currentLocation != "") {
+                        items = vm.data.filter((item, key) => {
+                            return item.Add.substring(6, item.Add.indexOf("區", 0) + 1) == vm.currentLocation
+                        })
+                    } else {
+                        items = vm.data;
+                    }
+                    items.forEach((item, key) => {
+                        if (key % 20 === 0) {
+                            newData.push([]);
+                        }
+                        const page = parseInt(key / 20);//取整數
+                        newData[page].push(item);
+                    });
+                    // console.log(newData);
+                    return newData;
+                }
+            },
+            mounted() {
+                // 畫地圖
+                this.drawMap();
+                this.updataMarkers();
+            },
+        }
+        Vue.createApp(App).mount("#app");
+
+    </script>
+</body>
+
+</html>
